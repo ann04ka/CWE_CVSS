@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 GITHUB_GRAPHQL = "https://api.github.com/graphql"
-GITHUB_REST    = "https://api.github.com"
+GITHUB_REST = "https://api.github.com"
 
 GHSA_QUERY = """
 query($cursor: String) {
@@ -102,7 +102,9 @@ def collect_ghsa(token: str, out_path: Path, limit: int = 0):
                             {
                                 "name": v["package"]["name"],
                                 "ecosystem": v["package"]["ecosystem"],
-                                "first_patch": (v.get("firstPatchedVersion") or {}).get("identifier"),
+                                "first_patch": (v.get("firstPatchedVersion") or {}).get(
+                                    "identifier"
+                                ),
                             }
                             for v in node.get("vulnerabilities", {}).get("nodes", [])
                         ],
@@ -120,10 +122,11 @@ def collect_ghsa(token: str, out_path: Path, limit: int = 0):
 
     log.info(f"GHSA: собрано {total} advisory → {out_path}")
 
+
 LINUX_REPO = "torvalds/linux"
 LINUX_STABLE_REPOS = [
     "torvalds/linux",
-    "gregkh/linux",   # stable backports
+    "gregkh/linux",  # stable backports
 ]
 
 
@@ -220,9 +223,8 @@ def collect_linux_patches(
 
     log.info(f"Linux patches: найдено {found} коммитов → {out_path}")
 
-GITHUB_COMMIT_RE = re.compile(
-    r"github\.com/([^/]+/[^/]+)/commit/([0-9a-f]{40})", re.IGNORECASE
-)
+
+GITHUB_COMMIT_RE = re.compile(r"github\.com/([^/]+/[^/]+)/commit/([0-9a-f]{40})", re.IGNORECASE)
 
 
 def collect_patches_from_refs(
@@ -246,9 +248,10 @@ def collect_patches_from_refs(
     repo_re = re.compile(filter_repo_pattern, re.IGNORECASE) if filter_repo_pattern else None
 
     found = 0
-    with cve_list_path.open("r", encoding="utf-8") as fin, \
-         out_path.open("w", encoding="utf-8") as fout:
-
+    with (
+        cve_list_path.open("r", encoding="utf-8") as fin,
+        out_path.open("w", encoding="utf-8") as fout,
+    ):
         lines = fin.readlines()
         for line in tqdm(lines, desc="Refs→patches"):
             rec = json.loads(line)
@@ -267,12 +270,14 @@ def collect_patches_from_refs(
 
                 diff = fetch_commit_diff(session, repo, sha)
                 if diff:
-                    patch_records.append({
-                        "repo": repo,
-                        "sha": sha,
-                        "url": ref,
-                        "diff": diff[:max_diff_chars],
-                    })
+                    patch_records.append(
+                        {
+                            "repo": repo,
+                            "sha": sha,
+                            "url": ref,
+                            "diff": diff[:max_diff_chars],
+                        }
+                    )
                     found += 1
                 time.sleep(0.3)
 
@@ -304,7 +309,9 @@ def main():
     p_refs.add_argument("--token", required=True)
     p_refs.add_argument("--cve-list", required=True)
     p_refs.add_argument("--out", default="ref_patches.jsonl")
-    p_refs.add_argument("--filter-repo", default=None, help="Regex фильтр репозитория, напр. 'linux|kernel'")
+    p_refs.add_argument(
+        "--filter-repo", default=None, help="Regex фильтр репозитория, напр. 'linux|kernel'"
+    )
 
     args = parser.parse_args()
 

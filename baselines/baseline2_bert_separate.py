@@ -43,8 +43,13 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
 
 from baselines.common import (
-    METRICS, NUM_CLASSES, LABEL2IDX,
-    load_jsonl, encode_labels, evaluate, print_results,
+    METRICS,
+    NUM_CLASSES,
+    LABEL2IDX,
+    load_jsonl,
+    encode_labels,
+    evaluate,
+    print_results,
 )
 from baselines.bert_common import (
     CVSSDataset,
@@ -58,6 +63,7 @@ from baselines.bert_common import (
 
 
 # ── Model ─────────────────────────────────────────────────────────────────────
+
 
 class BertSingleMetricModel(nn.Module):
     """
@@ -73,8 +79,8 @@ class BertSingleMetricModel(nn.Module):
         super().__init__()
         self.metric = metric
         self.encoder = AutoModel.from_pretrained(model_name)
-        hidden_size  = self.encoder.config.hidden_size
-        self.dropout    = nn.Dropout(dropout)
+        hidden_size = self.encoder.config.hidden_size
+        self.dropout = nn.Dropout(dropout)
         self.classifier = nn.Linear(hidden_size, NUM_CLASSES[metric])
 
     def forward(
@@ -82,14 +88,15 @@ class BertSingleMetricModel(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
     ) -> torch.Tensor:
-        out    = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        out = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         # DistilBERT: last_hidden_state; BERT: pooler_output or last_hidden_state[:,0]
-        pooled = out.last_hidden_state[:, 0, :]   # [CLS] token
+        pooled = out.last_hidden_state[:, 0, :]  # [CLS] token
         pooled = self.dropout(pooled)
         return self.classifier(pooled)
 
 
 # ── Training one metric ───────────────────────────────────────────────────────
+
 
 def train_one_metric(
     metric: str,
@@ -108,12 +115,14 @@ def train_one_metric(
     """
     # ── Datasets & loaders ─────────────────────────────────────────────────
     train_ds = CVSSDataset(train_records, tokenizer, args.max_length)
-    val_ds   = CVSSDataset(val_records,   tokenizer, args.max_length)
+    val_ds = CVSSDataset(val_records, tokenizer, args.max_length)
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size,
-                              shuffle=True,  num_workers=0, pin_memory=False)
-    val_loader   = DataLoader(val_ds,   batch_size=args.batch_size * 2,
-                              shuffle=False, num_workers=0, pin_memory=False)
+    train_loader = DataLoader(
+        train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=False
+    )
+    val_loader = DataLoader(
+        val_ds, batch_size=args.batch_size * 2, shuffle=False, num_workers=0, pin_memory=False
+    )
 
     # ── Loss with class weights ─────────────────────────────────────────────
     train_labels = encode_labels(train_records)[metric]
@@ -123,56 +132,62 @@ def train_one_metric(
     # ── Model, optimizer, scheduler ────────────────────────────────────────
     model = BertSingleMetricModel(metric, args.model_name, args.dropout).to(device)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=args.lr, weight_decay=0.01
-    )
-    total_steps  = len(train_loader) * args.epochs
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    total_steps = len(train_loader) * args.epochs
     warmup_steps = int(total_steps * 0.06)
-    scheduler    = get_linear_schedule_with_warmup(
-        optimizer, warmup_steps, total_steps
-    )
+    scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
 
     scaler = torch.cuda.amp.GradScaler() if (device.type == "cuda" and args.fp16) else None
 
     # ── Training loop ───────────────────────────────────────────────────────
     best_val_loss = float("inf")
-    best_state    = None
-    patience_cnt  = 0
+    best_state = None
+    patience_cnt = 0
     history: list[dict] = []
 
     for epoch in range(1, args.epochs + 1):
         train_loss = train_epoch_single(
-            model, train_loader, optimizer, scheduler,
-            criterion, metric, device, scaler,
+            model,
+            train_loader,
+            optimizer,
+            scheduler,
+            criterion,
+            metric,
+            device,
+            scaler,
         )
 
         # Validation loss + per-metric accuracy
         model.eval()
-        val_loss   = 0.0
-        n_correct  = 0
-        n_total    = 0
+        val_loss = 0.0
+        n_correct = 0
+        n_total = 0
         with torch.no_grad():
             for batch in val_loader:
-                ids  = batch["input_ids"].to(device)
+                ids = batch["input_ids"].to(device)
                 mask = batch["attention_mask"].to(device)
                 lbls = batch["labels"][metric].to(device)
                 logits = model(ids, mask)
-                val_loss  += criterion(logits, lbls).item()
+                val_loss += criterion(logits, lbls).item()
                 n_correct += (logits.argmax(-1) == lbls).sum().item()
-                n_total   += lbls.size(0)
+                n_total += lbls.size(0)
         val_loss /= len(val_loader)
-        val_acc   = n_correct / max(n_total, 1)
+        val_acc = n_correct / max(n_total, 1)
 
-        history.append({
-            "epoch":      epoch,
-            "train_loss": round(train_loss, 6),
-            "val_loss":   round(val_loss,   6),
-            "val_acc":    round(val_acc,     6),
-        })
+        history.append(
+            {
+                "epoch": epoch,
+                "train_loss": round(train_loss, 6),
+                "val_loss": round(val_loss, 6),
+                "val_acc": round(val_acc, 6),
+            }
+        )
 
-        print(f"    Epoch {epoch}/{args.epochs}  "
-              f"train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  "
-              f"val_acc={val_acc:.4f}")
+        print(
+            f"    Epoch {epoch}/{args.epochs}  "
+            f"train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  "
+            f"val_acc={val_acc:.4f}"
+        )
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -193,39 +208,45 @@ def train_one_metric(
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Baseline 2: BERT Separate Models (DistilBERT)"
+    parser = argparse.ArgumentParser(description="Baseline 2: BERT Separate Models (DistilBERT)")
+    parser.add_argument("--data-dir", default="dataset")
+    parser.add_argument(
+        "--model-dir",
+        default="models/baseline2",
+        help="Directory to save/load per-metric model checkpoints",
     )
-    parser.add_argument("--data-dir",    default="dataset")
-    parser.add_argument("--model-dir",   default="models/baseline2",
-                        help="Directory to save/load per-metric model checkpoints")
-    parser.add_argument("--results-out", default=None,
-                        help="JSON file to write evaluation results")
-    parser.add_argument("--model-name",  default="distilbert-base-uncased",
-                        help="HuggingFace model name/path")
+    parser.add_argument("--results-out", default=None, help="JSON file to write evaluation results")
+    parser.add_argument(
+        "--model-name", default="distilbert-base-uncased", help="HuggingFace model name/path"
+    )
     # Training hyperparameters
-    parser.add_argument("--epochs",     type=int,   default=4)
-    parser.add_argument("--batch-size", type=int,   default=32)
-    parser.add_argument("--lr",         type=float, default=2e-5)
-    parser.add_argument("--max-length", type=int,   default=128)
-    parser.add_argument("--dropout",    type=float, default=0.3)
-    parser.add_argument("--patience",   type=int,   default=3,
-                        help="Early stopping patience (epochs)")
-    parser.add_argument("--fp16",       action="store_true",
-                        help="Use mixed precision (requires CUDA)")
-    parser.add_argument("--device",     default=None,
-                        help="Force device: cuda / cpu")
+    parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--lr", type=float, default=2e-5)
+    parser.add_argument("--max-length", type=int, default=128)
+    parser.add_argument("--dropout", type=float, default=0.3)
+    parser.add_argument("--patience", type=int, default=3, help="Early stopping patience (epochs)")
+    parser.add_argument("--fp16", action="store_true", help="Use mixed precision (requires CUDA)")
+    parser.add_argument("--device", default=None, help="Force device: cuda / cpu")
     # Load pre-trained models (skip training)
-    parser.add_argument("--load-models", action="store_true",
-                        help="Load checkpoints from --model-dir instead of training")
+    parser.add_argument(
+        "--load-models",
+        action="store_true",
+        help="Load checkpoints from --model-dir instead of training",
+    )
     # Evaluate on specific metrics only (for quick testing)
-    parser.add_argument("--metrics",    nargs="*", default=None,
-                        help="Subset of metrics to train/evaluate (default: all 8)")
+    parser.add_argument(
+        "--metrics",
+        nargs="*",
+        default=None,
+        help="Subset of metrics to train/evaluate (default: all 8)",
+    )
     args = parser.parse_args()
 
-    device    = get_device(args.device)
-    data_dir  = Path(args.data_dir)
+    device = get_device(args.device)
+    data_dir = Path(args.data_dir)
     model_dir = Path(args.model_dir)
     active_metrics = args.metrics or METRICS
 
@@ -236,8 +257,8 @@ def main():
     # ── Load data ─────────────────────────────────────────────────────────
     print("\nLoading data ...")
     train_records = load_jsonl(data_dir / "train.jsonl")
-    val_records   = load_jsonl(data_dir / "val.jsonl")
-    test_records  = load_jsonl(data_dir / "test.jsonl")
+    val_records = load_jsonl(data_dir / "val.jsonl")
+    test_records = load_jsonl(data_dir / "test.jsonl")
     print(f"  train={len(train_records):,}  val={len(val_records):,}  test={len(test_records):,}")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
@@ -247,8 +268,8 @@ def main():
     all_histories: dict[str, list[dict]] = {}
 
     for m in active_metrics:
-        ckpt_path  = model_dir / f"metric_{m}.pt"
-        hist_path  = model_dir / f"history_{m}.json"
+        ckpt_path = model_dir / f"metric_{m}.pt"
+        hist_path = model_dir / f"history_{m}.json"
 
         if args.load_models and ckpt_path.exists():
             print(f"\n[{m}] Loading checkpoint from {ckpt_path}")
@@ -278,9 +299,8 @@ def main():
     all_true_labels = encode_labels(val_records)
 
     def predict_all(records: list[dict]) -> dict[str, list[int]]:
-        ds     = CVSSDataset(records, tokenizer, args.max_length)
-        loader = DataLoader(ds, batch_size=args.batch_size * 2,
-                            shuffle=False, num_workers=0)
+        ds = CVSSDataset(records, tokenizer, args.max_length)
+        loader = DataLoader(ds, batch_size=args.batch_size * 2, shuffle=False, num_workers=0)
         preds: dict[str, list[int]] = {}
         for m in METRICS:
             if m in models:
@@ -288,6 +308,7 @@ def main():
             else:
                 # Fallback: predict majority class from training set
                 from collections import Counter
+
                 train_labels = encode_labels(train_records)[m]
                 majority = Counter(train_labels).most_common(1)[0][0]
                 preds[m] = [majority] * len(records)
@@ -315,7 +336,7 @@ def main():
                 f"DistilBERT ({args.model_name}), 8 independent classifiers; "
                 f"epochs={args.epochs}, bs={args.batch_size}, lr={args.lr}"
             ),
-            "val":  val_results,
+            "val": val_results,
             "test": test_results,
         }
         with open(args.results_out, "w", encoding="utf-8") as f:

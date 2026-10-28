@@ -17,14 +17,14 @@ NVD_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 CVSS31_METRICS = ["AV", "AC", "PR", "UI", "S", "C", "I", "A"]
 
 CVSS31_VALUES = {
-    "AV": ["N", "A", "L", "P"],       # Network, Adjacent, Local, Physical
-    "AC": ["L", "H"],                  # Low, High
-    "PR": ["N", "L", "H"],            # None, Low, High
-    "UI": ["N", "R"],                  # None, Required
-    "S":  ["U", "C"],                  # Unchanged, Changed
-    "C":  ["N", "L", "H"],            # None, Low, High
-    "I":  ["N", "L", "H"],
-    "A":  ["N", "L", "H"],
+    "AV": ["N", "A", "L", "P"],  # Network, Adjacent, Local, Physical
+    "AC": ["L", "H"],  # Low, High
+    "PR": ["N", "L", "H"],  # None, Low, High
+    "UI": ["N", "R"],  # None, Required
+    "S": ["U", "C"],  # Unchanged, Changed
+    "C": ["N", "L", "H"],  # None, Low, High
+    "I": ["N", "L", "H"],
+    "A": ["N", "L", "H"],
 }
 
 
@@ -120,7 +120,7 @@ def fetch_page(session: requests.Session, params: dict, api_key: str | None) -> 
             r.raise_for_status()
             return r.json()
         except requests.RequestException as e:
-            log.warning(f"Ошибка запроса (попытка {attempt+1}): {e}")
+            log.warning(f"Ошибка запроса (попытка {attempt + 1}): {e}")
             time.sleep(10 * (attempt + 1))
 
     raise RuntimeError("Не удалось получить страницу после 5 попыток")
@@ -132,7 +132,7 @@ def date_chunks(start_year: int, end_year: int, chunk_days: int = 90):
     Разбиваем диапазон годов на чанки по chunk_days дней.
     """
     start = datetime(start_year, 1, 1, tzinfo=timezone.utc)
-    end   = datetime(end_year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+    end = datetime(end_year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
     cur = start
     while cur < end:
         chunk_end = min(cur + timedelta(days=chunk_days - 1), end)
@@ -206,8 +206,9 @@ def main():
     parser.add_argument("--end", type=int, default=2024, help="Конечный год")
     parser.add_argument("--out", default="nvd_cves.jsonl", help="Выходной файл .jsonl")
     parser.add_argument("--results-per-page", type=int, default=2000)
-    parser.add_argument("--chunk-days", type=int, default=90,
-                        help="Размер чанка в днях (max 120, NVD ограничение)")
+    parser.add_argument(
+        "--chunk-days", type=int, default=90, help="Размер чанка в днях (max 120, NVD ограничение)"
+    )
     args = parser.parse_args()
 
     # Пустой API key → None

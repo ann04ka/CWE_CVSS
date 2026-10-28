@@ -46,28 +46,38 @@ from baselines.common import (
 
 # ── Model definition ──────────────────────────────────────────────────────────
 
+
 def build_pipeline(metric: str) -> Pipeline:
     """TF-IDF + Logistic Regression pipeline for one CVSS metric."""
-    return Pipeline([
-        ("tfidf", TfidfVectorizer(
-            max_features=5_000,
-            ngram_range=(1, 2),
-            sublinear_tf=True,          # log(1+tf) instead of raw tf
-            strip_accents="unicode",
-            analyzer="word",
-            token_pattern=r"(?u)\b\w+\b",
-        )),
-        ("clf", LogisticRegression(
-            class_weight="balanced",    # combat label imbalance
-            max_iter=1_000,
-            solver="lbfgs",
-            random_state=42,
-            C=1.0,
-        )),
-    ])
+    return Pipeline(
+        [
+            (
+                "tfidf",
+                TfidfVectorizer(
+                    max_features=5_000,
+                    ngram_range=(1, 2),
+                    sublinear_tf=True,  # log(1+tf) instead of raw tf
+                    strip_accents="unicode",
+                    analyzer="word",
+                    token_pattern=r"(?u)\b\w+\b",
+                ),
+            ),
+            (
+                "clf",
+                LogisticRegression(
+                    class_weight="balanced",  # combat label imbalance
+                    max_iter=1_000,
+                    solver="lbfgs",
+                    random_state=42,
+                    C=1.0,
+                ),
+            ),
+        ]
+    )
 
 
 # ── Training ──────────────────────────────────────────────────────────────────
+
 
 def train(train_records: list[dict]) -> dict[str, Pipeline]:
     """
@@ -76,7 +86,7 @@ def train(train_records: list[dict]) -> dict[str, Pipeline]:
     Returns:
         Dict mapping metric name → fitted Pipeline.
     """
-    texts  = [r.get("description", "") or "" for r in train_records]
+    texts = [r.get("description", "") or "" for r in train_records]
     labels = encode_labels(train_records)
 
     models: dict[str, Pipeline] = {}
@@ -87,6 +97,7 @@ def train(train_records: list[dict]) -> dict[str, Pipeline]:
         models[m] = pipe
         # Show dominant class baseline for reference
         from collections import Counter
+
         cnt = Counter(labels[m])
         majority_acc = max(cnt.values()) / len(labels[m])
         print(f"done  (majority baseline: {majority_acc:.1%})")
@@ -96,6 +107,7 @@ def train(train_records: list[dict]) -> dict[str, Pipeline]:
 
 # ── Prediction ────────────────────────────────────────────────────────────────
 
+
 def predict(models: dict[str, Pipeline], records: list[dict]) -> dict[str, list[int]]:
     texts = [r.get("description", "") or "" for r in records]
     return {m: list(models[m].predict(texts)) for m in METRICS}
@@ -103,12 +115,13 @@ def predict(models: dict[str, Pipeline], records: list[dict]) -> dict[str, list[
 
 # ── Feature importance ────────────────────────────────────────────────────────
 
+
 def top_features(models: dict[str, Pipeline], top_k: int = 10):
     """Print the most informative n-grams per metric."""
     print("\n[Top features per metric]")
     for m, pipe in models.items():
         tfidf: TfidfVectorizer = pipe.named_steps["tfidf"]
-        clf: LogisticRegression  = pipe.named_steps["clf"]
+        clf: LogisticRegression = pipe.named_steps["clf"]
         feature_names = tfidf.get_feature_names_out()
 
         if clf.coef_.shape[0] == 1:
@@ -127,20 +140,20 @@ def top_features(models: dict[str, Pipeline], top_k: int = 10):
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Baseline 1: TF-IDF + Logistic Regression"
+    parser = argparse.ArgumentParser(description="Baseline 1: TF-IDF + Logistic Regression")
+    parser.add_argument(
+        "--data-dir", default="dataset", help="Directory containing train/val/test.jsonl"
     )
-    parser.add_argument("--data-dir",    default="dataset",
-                        help="Directory containing train/val/test.jsonl")
-    parser.add_argument("--save-model",  default=None,
-                        help="Path to save trained pipelines (.pkl)")
-    parser.add_argument("--load-model",  default=None,
-                        help="Path to load pre-trained pipelines (.pkl)")
-    parser.add_argument("--results-out", default=None,
-                        help="JSON file to write evaluation results")
-    parser.add_argument("--show-features", action="store_true",
-                        help="Print top TF-IDF features per metric")
+    parser.add_argument("--save-model", default=None, help="Path to save trained pipelines (.pkl)")
+    parser.add_argument(
+        "--load-model", default=None, help="Path to load pre-trained pipelines (.pkl)"
+    )
+    parser.add_argument("--results-out", default=None, help="JSON file to write evaluation results")
+    parser.add_argument(
+        "--show-features", action="store_true", help="Print top TF-IDF features per metric"
+    )
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -148,8 +161,8 @@ def main():
     # ── Load data ────────────────────────────────────────────────────────────
     print("Loading data ...")
     train_records = load_jsonl(data_dir / "train.jsonl")
-    val_records   = load_jsonl(data_dir / "val.jsonl")
-    test_records  = load_jsonl(data_dir / "test.jsonl")
+    val_records = load_jsonl(data_dir / "val.jsonl")
+    test_records = load_jsonl(data_dir / "test.jsonl")
     print(f"  train={len(train_records):,}  val={len(val_records):,}  test={len(test_records):,}")
 
     # ── Train or load model ──────────────────────────────────────────────────
@@ -189,7 +202,7 @@ def main():
         out = {
             "baseline": "tfidf_lr",
             "description": "TF-IDF (5k features, bigrams) + Logistic Regression (balanced)",
-            "val":  val_results,
+            "val": val_results,
             "test": test_results,
         }
         with open(args.results_out, "w", encoding="utf-8") as f:

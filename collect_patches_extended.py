@@ -16,7 +16,8 @@ from tqdm import tqdm
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-MAX_DIFF_CHARS = 60_000   
+MAX_DIFF_CHARS = 60_000
+
 
 def load_jsonl(path: Path) -> list[dict]:
     with path.open("r", encoding="utf-8") as f:
@@ -33,18 +34,24 @@ def save_jsonl(records: list[dict], path: Path):
 def make_session(gh_token: str | None = None) -> requests.Session:
     s = requests.Session()
     if gh_token:
-        s.headers.update({
-            "Authorization": f"token {gh_token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        })
+        s.headers.update(
+            {
+                "Authorization": f"token {gh_token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            }
+        )
     s.headers.update({"User-Agent": "cvss-research-bot/1.0"})
     return s
 
 
-def safe_get(session: requests.Session, url: str,
-             headers: dict | None = None, timeout: int = 20,
-             retries: int = 3) -> requests.Response | None:
+def safe_get(
+    session: requests.Session,
+    url: str,
+    headers: dict | None = None,
+    timeout: int = 20,
+    retries: int = 3,
+) -> requests.Response | None:
     for attempt in range(retries):
         try:
             r = session.get(url, headers=headers, timeout=timeout)
@@ -64,54 +71,56 @@ def safe_get(session: requests.Session, url: str,
                 log.debug(f"Не удалось получить {url}: {e}")
     return None
 
-SHA_RE   = r"[0-9a-f]{7,40}"
+
+SHA_RE = r"[0-9a-f]{7,40}"
 SHA40_RE = r"[0-9a-f]{40}"
 
 URL_PATTERNS: list[tuple[str, re.Pattern, str]] = [
     # GitHub commit
-    ("github",
-     re.compile(rf"github\.com/([^/]+/[^/]+)/commit/({SHA_RE})", re.I),
-     r"\1|\2"),
-
+    ("github", re.compile(rf"github\.com/([^/]+/[^/]+)/commit/({SHA_RE})", re.I), r"\1|\2"),
     # GitHub pull request commit  github.com/A/B/pull/123/commits/SHA
-    ("github",
-     re.compile(rf"github\.com/([^/]+/[^/]+)/pull/\d+/commits/({SHA_RE})", re.I),
-     r"\1|\2"),
-
+    (
+        "github",
+        re.compile(rf"github\.com/([^/]+/[^/]+)/pull/\d+/commits/({SHA_RE})", re.I),
+        r"\1|\2",
+    ),
     # kernel.org cgit: /commit/?id=SHA  or  /commit/?h=...&id=SHA
-    ("kernel_cgit",
-     re.compile(rf"git\.kernel\.org/[^?#]+\?(?:[^&]*&)*id=({SHA_RE})", re.I),
-     r"torvalds/linux|\1"),
-
+    (
+        "kernel_cgit",
+        re.compile(rf"git\.kernel\.org/[^?#]+\?(?:[^&]*&)*id=({SHA_RE})", re.I),
+        r"torvalds/linux|\1",
+    ),
     # kernel.org /linus/SHA
-    ("kernel_cgit",
-     re.compile(rf"git\.kernel\.org/linus/({SHA_RE})", re.I),
-     r"torvalds/linux|\1"),
-
+    ("kernel_cgit", re.compile(rf"git\.kernel\.org/linus/({SHA_RE})", re.I), r"torvalds/linux|\1"),
     # kernel.org pub URL  .../linux.git/commit/?id=SHA
-    ("kernel_cgit",
-     re.compile(rf"kernel\.org/pub/scm/linux/kernel/git/[^/]+/[^/]+\.git/commit\?(?:[^&]*&)*id=({SHA_RE})", re.I),
-     r"torvalds/linux|\1"),
-
+    (
+        "kernel_cgit",
+        re.compile(
+            rf"kernel\.org/pub/scm/linux/kernel/git/[^/]+/[^/]+\.git/commit\?(?:[^&]*&)*id=({SHA_RE})",
+            re.I,
+        ),
+        r"torvalds/linux|\1",
+    ),
     # GitLab: gitlab.com/a/b/-/commit/SHA  or  gitlab.com/a/b/commit/SHA
-    ("gitlab",
-     re.compile(rf"gitlab\.com/([^/]+/[^/]+)(?:/-)?/commit/({SHA_RE})", re.I),
-     r"\1|\2"),
-
+    ("gitlab", re.compile(rf"gitlab\.com/([^/]+/[^/]+)(?:/-)?/commit/({SHA_RE})", re.I), r"\1|\2"),
     # Android googlesource: android.googlesource.com/REPO/+/SHA
-    ("googlesource",
-     re.compile(rf"android\.googlesource\.com/([^/]+(?:/[^/+]+)*)/\+/({SHA_RE})", re.I),
-     r"android/\1|\2"),
-
+    (
+        "googlesource",
+        re.compile(rf"android\.googlesource\.com/([^/]+(?:/[^/+]+)*)/\+/({SHA_RE})", re.I),
+        r"android/\1|\2",
+    ),
     # Chromium googlesource
-    ("googlesource",
-     re.compile(rf"chromium\.googlesource\.com/([^/]+(?:/[^/+]+)*)/\+/({SHA_RE})", re.I),
-     r"chromium/\1|\2"),
-
+    (
+        "googlesource",
+        re.compile(rf"chromium\.googlesource\.com/([^/]+(?:/[^/+]+)*)/\+/({SHA_RE})", re.I),
+        r"chromium/\1|\2",
+    ),
     # Generic googlesource  *.googlesource.com/REPO/+/SHA
-    ("googlesource",
-     re.compile(rf"([\w\-]+)\.googlesource\.com/([^/]+(?:/[^/+]+)*)/\+/({SHA_RE})", re.I),
-     r"\1/\2|\3"),
+    (
+        "googlesource",
+        re.compile(rf"([\w\-]+)\.googlesource\.com/([^/]+(?:/[^/+]+)*)/\+/({SHA_RE})", re.I),
+        r"\1/\2|\3",
+    ),
 ]
 
 
@@ -131,6 +140,7 @@ def parse_url(url: str) -> list[tuple[str, str, str]]:
         if len(parts) == 2:
             results.append((platform, parts[0], parts[1]))
     return results
+
 
 def fetch_github_diff(session: requests.Session, repo: str, sha: str) -> str | None:
     """Diff коммита через GitHub REST API."""
@@ -159,11 +169,9 @@ def fetch_kernel_diff_via_lore(sha: str) -> str | None:
     Запасной вариант: kernel.org cgit напрямую (plain patch endpoint).
     https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id=SHA
     """
-    url = (f"https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git"
-           f"/patch/?id={sha}")
+    url = f"https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/patch/?id={sha}"
     try:
-        r = requests.get(url, timeout=25,
-                         headers={"User-Agent": "cvss-research-bot/1.0"})
+        r = requests.get(url, timeout=25, headers={"User-Agent": "cvss-research-bot/1.0"})
         if r.status_code == 200 and r.text.startswith("From "):
             return r.text[:MAX_DIFF_CHARS]
     except requests.RequestException:
@@ -185,7 +193,7 @@ def fetch_gitlab_diff(session: requests.Session, repo: str, sha: str) -> str | N
         # Собираем unified diff из JSON-ответа GitLab
         parts = []
         for d in diffs:
-            header = f"diff --git a/{d.get('old_path','')} b/{d.get('new_path','')}\n"
+            header = f"diff --git a/{d.get('old_path', '')} b/{d.get('new_path', '')}\n"
             parts.append(header + d.get("diff", ""))
         combined = "".join(parts)
         return combined[:MAX_DIFF_CHARS] if combined else None
@@ -199,15 +207,15 @@ def fetch_googlesource_diff(url_original: str, repo_key: str, sha: str) -> str |
     """
     # Восстанавливаем base URL из repo_key (platform/repo — это ключ,
     # но нам нужен оригинальный хост)
-    m = re.search(r"(https?://[^/]*googlesource\.com/[^+]+)/\+/" + re.escape(sha),
-                  url_original, re.I)
+    m = re.search(
+        r"(https?://[^/]*googlesource\.com/[^+]+)/\+/" + re.escape(sha), url_original, re.I
+    )
     if not m:
         return None
     base = m.group(1).rstrip("/")
     patch_url = f"{base}/+/{sha}^!/?format=TEXT"
     try:
-        r = requests.get(patch_url, timeout=25,
-                         headers={"User-Agent": "cvss-research-bot/1.0"})
+        r = requests.get(patch_url, timeout=25, headers={"User-Agent": "cvss-research-bot/1.0"})
         if r.status_code != 200 or not r.text:
             return None
         # Ответ — base64
@@ -220,9 +228,9 @@ def fetch_googlesource_diff(url_original: str, repo_key: str, sha: str) -> str |
         return None
 
 
-def fetch_diff(session: requests.Session,
-               platform: str, repo: str, sha: str,
-               original_url: str = "") -> str | None:
+def fetch_diff(
+    session: requests.Session, platform: str, repo: str, sha: str, original_url: str = ""
+) -> str | None:
     """Универсальный диспетчер по платформе."""
     if platform == "github":
         return fetch_github_diff(session, repo, sha)
@@ -237,6 +245,7 @@ def fetch_diff(session: requests.Session,
     elif platform == "googlesource":
         return fetch_googlesource_diff(original_url, repo, sha)
     return None
+
 
 def collect_refs_extended(
     nvd_path: Path,
@@ -268,13 +277,15 @@ def collect_refs_extended(
                 diff = fetch_diff(session, platform, repo, sha, original_url=url)
                 time.sleep(sleep_s)
                 if diff:
-                    patches.append({
-                        "platform": platform,
-                        "repo": repo,
-                        "sha": sha,
-                        "url": url,
-                        "diff": diff,
-                    })
+                    patches.append(
+                        {
+                            "platform": platform,
+                            "repo": repo,
+                            "sha": sha,
+                            "url": url,
+                            "diff": diff,
+                        }
+                    )
                     found_total += 1
                     break  # один diff на ссылку
 
@@ -283,6 +294,7 @@ def collect_refs_extended(
 
     save_jsonl(out_records, out_path)
     log.info(f"refs-ext итого: {found_total} диффов для {len(out_records)} CVE")
+
 
 OSV_API = "https://api.osv.dev/v1"
 
@@ -314,8 +326,7 @@ def extract_fix_commits_from_osv(osv_entry: dict) -> list[dict]:
                 key = f"{repo}@{sha}"
                 if key not in seen:
                     seen.add(key)
-                    fixes.append({"platform": platform, "repo": repo,
-                                  "sha": sha, "url": url})
+                    fixes.append({"platform": platform, "repo": repo, "sha": sha, "url": url})
 
     # b) Structured git ranges
     for affected in osv_entry.get("affected", []):
@@ -347,8 +358,9 @@ def extract_fix_commits_from_osv(osv_entry: dict) -> list[dict]:
                 key = f"{repo_key}@{sha}"
                 if key not in seen:
                     seen.add(key)
-                    fixes.append({"platform": platform, "repo": repo_key,
-                                  "sha": sha, "url": repo_url})
+                    fixes.append(
+                        {"platform": platform, "repo": repo_key, "sha": sha, "url": repo_url}
+                    )
     return fixes
 
 
@@ -363,7 +375,7 @@ def collect_osv(
     Для каждого CVE в nvd_cves.jsonl запрашиваем OSV.dev,
     извлекаем FIX-коммиты, скачиваем диффы.
     """
-    session_osv  = make_session()          # OSV — без авторизации
+    session_osv = make_session()  # OSV — без авторизации
     session_diff = make_session(gh_token)  # для GitHub/GitLab
 
     records = load_jsonl(nvd_path)
@@ -391,7 +403,9 @@ def collect_osv(
         for fix in fix_commits[:4]:
             diff = fetch_diff(
                 session_diff,
-                fix["platform"], fix["repo"], fix["sha"],
+                fix["platform"],
+                fix["repo"],
+                fix["sha"],
                 original_url=fix["url"],
             )
             time.sleep(0.4)
@@ -411,6 +425,7 @@ def collect_osv(
 
     save_jsonl(out_records, out_path)
     log.info(f"OSV итого: {found_diff} диффов для {found_cve} CVE")
+
 
 KNOWN_HOSTS = [
     "github.com",
@@ -435,6 +450,7 @@ def analyze_stats(nvd_path: Path, sample: int = 0):
     records = load_jsonl(nvd_path)
     if sample:
         import random
+
         random.shuffle(records)
         records = records[:sample]
 
@@ -457,10 +473,10 @@ def analyze_stats(nvd_path: Path, sample: int = 0):
                 for platform, repo, sha in parsed:
                     pattern_counter[platform] += 1
 
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print(f"CVE проанализировано : {len(records):,}")
     print(f"Всего references     : {total_refs:,}")
-    print(f"Парсируемых (есть SHA): {parseable:,}  ({parseable/max(total_refs,1)*100:.1f}%)")
+    print(f"Парсируемых (есть SHA): {parseable:,}  ({parseable / max(total_refs, 1) * 100:.1f}%)")
     print(f"\nТоп-20 хостов в references:")
     for host, cnt in host_counter.most_common(20):
         print(f"  {cnt:6,}  {host}")
@@ -470,48 +486,45 @@ def analyze_stats(nvd_path: Path, sample: int = 0):
 
     # Сколько CVE имеют хотя бы одну парсируемую ссылку
     cve_with_parseable = sum(
-        1 for rec in records
-        if any(parse_url(u) for u in rec.get("references", []))
+        1 for rec in records if any(parse_url(u) for u in rec.get("references", []))
     )
-    print(f"\nCVE с ≥1 парсируемой ref: {cve_with_parseable:,} "
-          f"({cve_with_parseable/len(records)*100:.1f}%)")
-    print(f"{'─'*60}\n")
+    print(
+        f"\nCVE с ≥1 парсируемой ref: {cve_with_parseable:,} "
+        f"({cve_with_parseable / len(records) * 100:.1f}%)"
+    )
+    print(f"{'─' * 60}\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Расширенный сбор диффов: refs-ext | osv | stats"
-    )
+    parser = argparse.ArgumentParser(description="Расширенный сбор диффов: refs-ext | osv | stats")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     # stats
     p_stats = sub.add_parser("stats", help="Анализ паттернов references в NVD данных")
     p_stats.add_argument("--nvd", required=True, help="nvd_cves.jsonl")
-    p_stats.add_argument("--sample", type=int, default=0,
-                         help="Кол-во CVE для выборки (0 = все)")
+    p_stats.add_argument("--sample", type=int, default=0, help="Кол-во CVE для выборки (0 = все)")
 
     # refs-ext
-    p_refs = sub.add_parser("refs-ext",
-                             help="Расширенный парсинг NVD references (kernel/gitlab/googlesource)")
-    p_refs.add_argument("--nvd",    required=True, help="nvd_cves.jsonl")
-    p_refs.add_argument("--out",    default="ref_ext_patches.jsonl")
-    p_refs.add_argument("--token",  default=None, help="GitHub PAT (рекомендуется)")
-    p_refs.add_argument("--sleep",  type=float, default=0.5,
-                        help="Пауза между запросами (сек)")
-    p_refs.add_argument("--max-patches", type=int, default=3,
-                        help="Макс. диффов на CVE")
+    p_refs = sub.add_parser(
+        "refs-ext", help="Расширенный парсинг NVD references (kernel/gitlab/googlesource)"
+    )
+    p_refs.add_argument("--nvd", required=True, help="nvd_cves.jsonl")
+    p_refs.add_argument("--out", default="ref_ext_patches.jsonl")
+    p_refs.add_argument("--token", default=None, help="GitHub PAT (рекомендуется)")
+    p_refs.add_argument("--sleep", type=float, default=0.5, help="Пауза между запросами (сек)")
+    p_refs.add_argument("--max-patches", type=int, default=3, help="Макс. диффов на CVE")
 
     # osv
     p_osv = sub.add_parser("osv", help="OSV.dev API — structured fix commits (~40K CVE)")
-    p_osv.add_argument("--nvd",   required=True, help="nvd_cves.jsonl")
-    p_osv.add_argument("--out",   default="osv_patches.jsonl")
+    p_osv.add_argument("--nvd", required=True, help="nvd_cves.jsonl")
+    p_osv.add_argument("--out", default="osv_patches.jsonl")
     p_osv.add_argument("--token", default=None, help="GitHub PAT для скачивания диффов")
-    p_osv.add_argument("--sleep", type=float, default=0.15,
-                       help="Пауза между OSV запросами (сек)")
+    p_osv.add_argument("--sleep", type=float, default=0.15, help="Пауза между OSV запросами (сек)")
 
     args = parser.parse_args()
 
