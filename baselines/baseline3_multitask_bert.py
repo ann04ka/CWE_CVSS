@@ -52,8 +52,13 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
 
 from baselines.common import (
-    METRICS, NUM_CLASSES, TASK_WEIGHTS,
-    load_jsonl, encode_labels, evaluate, print_results,
+    METRICS,
+    NUM_CLASSES,
+    TASK_WEIGHTS,
+    load_jsonl,
+    encode_labels,
+    evaluate,
+    print_results,
 )
 from baselines.bert_common import (
     CVSSDataset,
@@ -68,6 +73,7 @@ from baselines.bert_common import (
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 
+
 class BertMultiTaskModel(nn.Module):
     """
     Shared DistilBERT encoder with 8 task-specific linear classification heads.
@@ -79,19 +85,16 @@ class BertMultiTaskModel(nn.Module):
     def __init__(
         self,
         model_name: str = "distilbert-base-uncased",
-        dropout: float  = 0.3,
+        dropout: float = 0.3,
     ):
         super().__init__()
         self.encoder = AutoModel.from_pretrained(model_name)
-        hidden_size  = self.encoder.config.hidden_size   # 768
+        hidden_size = self.encoder.config.hidden_size  # 768
 
         self.dropout = nn.Dropout(dropout)
 
         # One linear head per CVSS metric
-        self.heads = nn.ModuleDict({
-            m: nn.Linear(hidden_size, NUM_CLASSES[m])
-            for m in METRICS
-        })
+        self.heads = nn.ModuleDict({m: nn.Linear(hidden_size, NUM_CLASSES[m]) for m in METRICS})
 
     def forward(
         self,
@@ -102,13 +105,14 @@ class BertMultiTaskModel(nn.Module):
         Returns:
             Dict {metric: logits_tensor [batch, num_classes]}
         """
-        out    = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        pooled = out.last_hidden_state[:, 0, :]    # [CLS]
+        out = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        pooled = out.last_hidden_state[:, 0, :]  # [CLS]
         pooled = self.dropout(pooled)
         return {m: self.heads[m](pooled) for m in METRICS}
 
 
 # ── Training ──────────────────────────────────────────────────────────────────
+
 
 def build_criteria(
     train_records: list[dict],
@@ -135,45 +139,53 @@ def train(
     """
     # ── Datasets & loaders ────────────────────────────────────────────────
     train_ds = CVSSDataset(train_records, tokenizer, args.max_length)
-    val_ds   = CVSSDataset(val_records,   tokenizer, args.max_length)
+    val_ds = CVSSDataset(val_records, tokenizer, args.max_length)
 
     train_loader = DataLoader(
-        train_ds, batch_size=args.batch_size,
-        shuffle=True, num_workers=0, pin_memory=False,
+        train_ds,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=0,
+        pin_memory=False,
     )
     val_loader = DataLoader(
-        val_ds, batch_size=args.batch_size * 2,
-        shuffle=False, num_workers=0, pin_memory=False,
+        val_ds,
+        batch_size=args.batch_size * 2,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=False,
     )
 
     # ── Criteria & model ──────────────────────────────────────────────────
     criteria = build_criteria(train_records, device)
-    model    = BertMultiTaskModel(args.model_name, args.dropout).to(device)
+    model = BertMultiTaskModel(args.model_name, args.dropout).to(device)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=args.lr, weight_decay=0.01
-    )
-    total_steps  = len(train_loader) * args.epochs
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    total_steps = len(train_loader) * args.epochs
     warmup_steps = int(total_steps * 0.06)
-    scheduler    = get_linear_schedule_with_warmup(
-        optimizer, warmup_steps, total_steps
-    )
+    scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
     scaler = torch.cuda.amp.GradScaler() if (device.type == "cuda" and args.fp16) else None
 
-    task_weights = TASK_WEIGHTS   # PR=1.5, C/I/A=1.2, rest=1.0
+    task_weights = TASK_WEIGHTS  # PR=1.5, C/I/A=1.2, rest=1.0
 
     best_val_loss = float("inf")
-    best_state    = None
-    patience_cnt  = 0
+    best_state = None
+    patience_cnt = 0
     history: list[dict] = []
 
     import numpy as np
 
     for epoch in range(1, args.epochs + 1):
         train_loss = train_epoch_multitask(
-            model, train_loader, optimizer, scheduler,
-            criteria, device, task_weights,
-            is_multimodal=False, scaler=scaler,
+            model,
+            train_loader,
+            optimizer,
+            scheduler,
+            criteria,
+            device,
+            task_weights,
+            is_multimodal=False,
+            scaler=scaler,
         )
 
         # Validation loss
@@ -181,21 +193,20 @@ def train(
         val_loss = 0.0
         with torch.no_grad():
             for batch in val_loader:
-                ids  = batch["input_ids"].to(device)
+                ids = batch["input_ids"].to(device)
                 mask = batch["attention_mask"].to(device)
                 logits_dict = model(ids, mask)
                 for m in METRICS:
                     lbls = batch["labels"][m].to(device)
-                    w    = task_weights.get(m, 1.0)
+                    w = task_weights.get(m, 1.0)
                     val_loss += w * criteria[m](logits_dict[m], lbls).item()
         val_loss /= len(val_loader)
 
         # Per-metric accuracy + exact match on val
         val_preds = predict_multitask(model, val_loader, device, is_multimodal=False)
-        val_true  = encode_labels(val_records)
+        val_true = encode_labels(val_records)
         per_acc = {
-            m: float(np.mean(np.array(val_true[m]) == np.array(val_preds[m])))
-            for m in METRICS
+            m: float(np.mean(np.array(val_true[m]) == np.array(val_preds[m]))) for m in METRICS
         }
         mean_acc = float(np.mean(list(per_acc.values())))
         exact = np.ones(len(val_records), dtype=bool)
@@ -203,14 +214,16 @@ def train(
             exact &= np.array(val_true[m]) == np.array(val_preds[m])
         exact_match = float(np.mean(exact))
 
-        history.append({
-            "epoch":       epoch,
-            "train_loss":  round(train_loss,  6),
-            "val_loss":    round(val_loss,     6),
-            "mean_acc":    round(mean_acc,     6),
-            "exact_match": round(exact_match,  6),
-            "per_metric_acc": {m: round(v, 6) for m, v in per_acc.items()},
-        })
+        history.append(
+            {
+                "epoch": epoch,
+                "train_loss": round(train_loss, 6),
+                "val_loss": round(val_loss, 6),
+                "mean_acc": round(mean_acc, 6),
+                "exact_match": round(exact_match, 6),
+                "per_metric_acc": {m: round(v, 6) for m, v in per_acc.items()},
+            }
+        )
 
         print(
             f"  Epoch {epoch}/{args.epochs}  "
@@ -236,28 +249,30 @@ def train(
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Baseline 3: Multi-task BERT (Scientific Contribution #1)"
     )
-    parser.add_argument("--data-dir",    default="dataset")
-    parser.add_argument("--model-dir",   default="models/baseline3")
+    parser.add_argument("--data-dir", default="dataset")
+    parser.add_argument("--model-dir", default="models/baseline3")
     parser.add_argument("--results-out", default=None)
-    parser.add_argument("--model-name",  default="distilbert-base-uncased")
-    parser.add_argument("--epochs",      type=int,   default=4)
-    parser.add_argument("--batch-size",  type=int,   default=32)
-    parser.add_argument("--lr",          type=float, default=2e-5)
-    parser.add_argument("--max-length",  type=int,   default=128)
-    parser.add_argument("--dropout",     type=float, default=0.3)
-    parser.add_argument("--patience",    type=int,   default=3)
-    parser.add_argument("--fp16",        action="store_true")
-    parser.add_argument("--device",      default=None)
-    parser.add_argument("--load-model",  default=None,
-                        help="Path to saved checkpoint (.pt); skips training")
+    parser.add_argument("--model-name", default="distilbert-base-uncased")
+    parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--lr", type=float, default=2e-5)
+    parser.add_argument("--max-length", type=int, default=128)
+    parser.add_argument("--dropout", type=float, default=0.3)
+    parser.add_argument("--patience", type=int, default=3)
+    parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--device", default=None)
+    parser.add_argument(
+        "--load-model", default=None, help="Path to saved checkpoint (.pt); skips training"
+    )
     args = parser.parse_args()
 
-    device    = get_device(args.device)
-    data_dir  = Path(args.data_dir)
+    device = get_device(args.device)
+    data_dir = Path(args.data_dir)
     model_dir = Path(args.model_dir)
 
     print(f"Device: {device}")
@@ -267,8 +282,8 @@ def main():
     # ── Load data ─────────────────────────────────────────────────────────
     print("\nLoading data ...")
     train_records = load_jsonl(data_dir / "train.jsonl")
-    val_records   = load_jsonl(data_dir / "val.jsonl")
-    test_records  = load_jsonl(data_dir / "test.jsonl")
+    val_records = load_jsonl(data_dir / "val.jsonl")
+    test_records = load_jsonl(data_dir / "test.jsonl")
     print(f"  train={len(train_records):,}  val={len(val_records):,}  test={len(test_records):,}")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
@@ -283,8 +298,10 @@ def main():
         model = BertMultiTaskModel(args.model_name, args.dropout).to(device)
         load_checkpoint(model, ckpt_path, device)
     else:
-        print(f"\nTraining multi-task BERT ({args.epochs} epochs, "
-              f"bs={args.batch_size}, lr={args.lr}) ...")
+        print(
+            f"\nTraining multi-task BERT ({args.epochs} epochs, "
+            f"bs={args.batch_size}, lr={args.lr}) ..."
+        )
         model, history = train(train_records, val_records, tokenizer, args, device)
         save_checkpoint(model, ckpt_path)
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -295,17 +312,16 @@ def main():
 
     # ── Evaluate ──────────────────────────────────────────────────────────
     def run_eval(records, split_name):
-        ds     = CVSSDataset(records, tokenizer, args.max_length)
-        loader = DataLoader(ds, batch_size=args.batch_size * 2,
-                            shuffle=False, num_workers=0)
+        ds = CVSSDataset(records, tokenizer, args.max_length)
+        loader = DataLoader(ds, batch_size=args.batch_size * 2, shuffle=False, num_workers=0)
         true_labels = encode_labels(records)
         pred_labels = predict_multitask(model, loader, device, is_multimodal=False)
-        results     = evaluate(true_labels, pred_labels, records)
+        results = evaluate(true_labels, pred_labels, records)
         print_results(f"Baseline 3 — Multi-task BERT  [{split_name}]", results)
         return results
 
     print("\nEvaluating on validation set ...")
-    val_results  = run_eval(val_records,  "Validation")
+    val_results = run_eval(val_records, "Validation")
     print("\nEvaluating on test set ...")
     test_results = run_eval(test_records, "Test")
 
@@ -320,7 +336,7 @@ def main():
                 f"epochs={args.epochs}, bs={args.batch_size}, lr={args.lr}"
             ),
             "task_weights": TASK_WEIGHTS,
-            "val":  val_results,
+            "val": val_results,
             "test": test_results,
         }
         with open(args.results_out, "w", encoding="utf-8") as f:

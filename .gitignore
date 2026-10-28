@@ -1,4 +1,24 @@
-dataset/train.jsonl
-nvd_cves.jsonl
+# Local environments and caches
+.venv/
+venv/
+.env/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Generated datasets, model artifacts and experiment outputs
 *.jsonl
 dataset/
+models/
+outputs/
+runs/
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Existing project-specific generated files
+nvd_cves.jsonl
+.idea/

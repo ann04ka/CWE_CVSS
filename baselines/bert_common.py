@@ -26,6 +26,7 @@ from baselines.common import METRICS, METRIC_CLASSES, LABEL2IDX, NUM_CLASSES
 
 # ── Diff preprocessing ───────────────────────────────────────────────────────
 
+
 def preprocess_diff(diff: str, max_lines: int = 120) -> str:
     """
     Extract changed lines (+/-) from a git unified diff.
@@ -47,6 +48,7 @@ def preprocess_diff(diff: str, max_lines: int = 120) -> str:
 
 
 # ── Datasets ─────────────────────────────────────────────────────────────────
+
 
 class CVSSDataset(Dataset):
     """
@@ -90,9 +92,9 @@ class CVSSDataset(Dataset):
             labels[m] = torch.tensor(LABEL2IDX[m].get(val, 0), dtype=torch.long)
 
         return {
-            "input_ids":      enc["input_ids"].squeeze(0),
+            "input_ids": enc["input_ids"].squeeze(0),
             "attention_mask": enc["attention_mask"].squeeze(0),
-            "labels":         labels,
+            "labels": labels,
         }
 
 
@@ -152,10 +154,10 @@ class MultiModalDataset(Dataset):
                 padding="max_length",
                 return_tensors="pt",
             )
-            code_input_ids      = code_enc["input_ids"].squeeze(0)
+            code_input_ids = code_enc["input_ids"].squeeze(0)
             code_attention_mask = code_enc["attention_mask"].squeeze(0)
         else:
-            code_input_ids      = torch.zeros(self.code_max_length, dtype=torch.long)
+            code_input_ids = torch.zeros(self.code_max_length, dtype=torch.long)
             code_attention_mask = torch.zeros(self.code_max_length, dtype=torch.long)
 
         # ── Labels ────────────────────────────────────────────────────────
@@ -166,16 +168,17 @@ class MultiModalDataset(Dataset):
             labels[m] = torch.tensor(LABEL2IDX[m].get(val, 0), dtype=torch.long)
 
         return {
-            "text_input_ids":      text_enc["input_ids"].squeeze(0),
+            "text_input_ids": text_enc["input_ids"].squeeze(0),
             "text_attention_mask": text_enc["attention_mask"].squeeze(0),
-            "code_input_ids":      code_input_ids,
+            "code_input_ids": code_input_ids,
             "code_attention_mask": code_attention_mask,
-            "has_code":            torch.tensor(has_code, dtype=torch.bool),
-            "labels":              labels,
+            "has_code": torch.tensor(has_code, dtype=torch.bool),
+            "labels": labels,
         }
 
 
 # ── Class weights ─────────────────────────────────────────────────────────────
+
 
 def compute_class_weights(
     labels: list[int],
@@ -188,14 +191,12 @@ def compute_class_weights(
     """
     counts = Counter(labels)
     total = len(labels)
-    weights = [
-        total / (num_classes * max(counts.get(c, 1), 1))
-        for c in range(num_classes)
-    ]
+    weights = [total / (num_classes * max(counts.get(c, 1), 1)) for c in range(num_classes)]
     return torch.tensor(weights, dtype=torch.float, device=device)
 
 
 # ── Device helper ─────────────────────────────────────────────────────────────
+
 
 def get_device(device_str: Optional[str] = None) -> torch.device:
     if device_str:
@@ -205,16 +206,17 @@ def get_device(device_str: Optional[str] = None) -> torch.device:
 
 # ── Training / Prediction loops ───────────────────────────────────────────────
 
+
 def train_epoch_multitask(
     model: nn.Module,
     dataloader,
     optimizer,
     scheduler,
-    criteria: dict,           # {metric: CrossEntropyLoss}
+    criteria: dict,  # {metric: CrossEntropyLoss}
     device: torch.device,
-    task_weights: dict,       # {metric: float}
+    task_weights: dict,  # {metric: float}
     is_multimodal: bool = False,
-    scaler=None,              # torch.cuda.amp.GradScaler or None
+    scaler=None,  # torch.cuda.amp.GradScaler or None
 ) -> float:
     """One training epoch for multi-task models (baselines 3 & 4)."""
     model.train()
@@ -224,15 +226,15 @@ def train_epoch_multitask(
         optimizer.zero_grad()
 
         if is_multimodal:
-            text_ids   = batch["text_input_ids"].to(device)
-            text_mask  = batch["text_attention_mask"].to(device)
-            code_ids   = batch["code_input_ids"].to(device)
-            code_mask  = batch["code_attention_mask"].to(device)
-            has_code   = batch["has_code"].to(device)
+            text_ids = batch["text_input_ids"].to(device)
+            text_mask = batch["text_attention_mask"].to(device)
+            code_ids = batch["code_input_ids"].to(device)
+            code_mask = batch["code_attention_mask"].to(device)
+            has_code = batch["has_code"].to(device)
             forward_fn = lambda: model(text_ids, text_mask, code_ids, code_mask, has_code)
         else:
-            ids   = batch["input_ids"].to(device)
-            mask  = batch["attention_mask"].to(device)
+            ids = batch["input_ids"].to(device)
+            mask = batch["attention_mask"].to(device)
             forward_fn = lambda: model(ids, mask)
 
         if scaler is not None:
@@ -272,9 +274,9 @@ def train_epoch_single(
     total_loss = 0.0
 
     for batch in tqdm(dataloader, desc=f"  train[{metric}]", leave=False, ncols=80):
-        ids   = batch["input_ids"].to(device)
-        mask  = batch["attention_mask"].to(device)
-        lbls  = batch["labels"][metric].to(device)
+        ids = batch["input_ids"].to(device)
+        mask = batch["attention_mask"].to(device)
+        lbls = batch["labels"][metric].to(device)
 
         optimizer.zero_grad()
 
@@ -328,14 +330,14 @@ def predict_multitask(
 
     for batch in tqdm(dataloader, desc="  predict", leave=False, ncols=80):
         if is_multimodal:
-            text_ids  = batch["text_input_ids"].to(device)
+            text_ids = batch["text_input_ids"].to(device)
             text_mask = batch["text_attention_mask"].to(device)
-            code_ids  = batch["code_input_ids"].to(device)
+            code_ids = batch["code_input_ids"].to(device)
             code_mask = batch["code_attention_mask"].to(device)
-            has_code  = batch["has_code"].to(device)
+            has_code = batch["has_code"].to(device)
             logits_dict = model(text_ids, text_mask, code_ids, code_mask, has_code)
         else:
-            ids  = batch["input_ids"].to(device)
+            ids = batch["input_ids"].to(device)
             mask = batch["attention_mask"].to(device)
             logits_dict = model(ids, mask)
 
@@ -357,7 +359,7 @@ def predict_single(
     preds = []
 
     for batch in tqdm(dataloader, desc=f"  predict[{metric}]", leave=False, ncols=80):
-        ids  = batch["input_ids"].to(device)
+        ids = batch["input_ids"].to(device)
         mask = batch["attention_mask"].to(device)
         logits = model(ids, mask)
         preds.extend(logits.argmax(dim=-1).cpu().tolist())
@@ -366,6 +368,7 @@ def predict_single(
 
 
 # ── Checkpoint helpers ────────────────────────────────────────────────────────
+
 
 def save_checkpoint(model: nn.Module, path: Path, extra: dict = None):
     path = Path(path)

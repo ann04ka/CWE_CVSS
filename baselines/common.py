@@ -20,14 +20,14 @@ import numpy as np
 METRICS = ["AV", "AC", "PR", "UI", "S", "C", "I", "A"]
 
 METRIC_CLASSES = {
-    "AV": ["N", "A", "L", "P"],   # Network, Adjacent, Local, Physical
-    "AC": ["L", "H"],              # Low, High
-    "PR": ["N", "L", "H"],        # None, Low, High
-    "UI": ["N", "R"],              # None, Required
-    "S":  ["U", "C"],             # Unchanged, Changed
-    "C":  ["N", "L", "H"],        # None, Low, High
-    "I":  ["N", "L", "H"],        # None, Low, High
-    "A":  ["N", "L", "H"],        # None, Low, High
+    "AV": ["N", "A", "L", "P"],  # Network, Adjacent, Local, Physical
+    "AC": ["L", "H"],  # Low, High
+    "PR": ["N", "L", "H"],  # None, Low, High
+    "UI": ["N", "R"],  # None, Required
+    "S": ["U", "C"],  # Unchanged, Changed
+    "C": ["N", "L", "H"],  # None, Low, High
+    "I": ["N", "L", "H"],  # None, Low, High
+    "A": ["N", "L", "H"],  # None, Low, High
 }
 
 METRIC_FULL_NAMES = {
@@ -35,10 +35,10 @@ METRIC_FULL_NAMES = {
     "AC": "Attack Complexity",
     "PR": "Privileges Required",
     "UI": "User Interaction",
-    "S":  "Scope",
-    "C":  "Confidentiality",
-    "I":  "Integrity",
-    "A":  "Availability",
+    "S": "Scope",
+    "C": "Confidentiality",
+    "I": "Integrity",
+    "A": "Availability",
 }
 
 LABEL2IDX = {m: {v: i for i, v in enumerate(vals)} for m, vals in METRIC_CLASSES.items()}
@@ -49,16 +49,17 @@ NUM_CLASSES = {m: len(v) for m, v in METRIC_CLASSES.items()}
 TASK_WEIGHTS = {
     "AV": 1.0,
     "AC": 1.0,
-    "PR": 1.5,   # Hardest metric
+    "PR": 1.5,  # Hardest metric
     "UI": 1.0,
-    "S":  1.0,
-    "C":  1.2,   # Impact metrics are medium difficulty
-    "I":  1.2,
-    "A":  1.2,
+    "S": 1.0,
+    "C": 1.2,  # Impact metrics are medium difficulty
+    "I": 1.2,
+    "A": 1.2,
 }
 
 
 # ── Data loading ──────────────────────────────────────────────────────────────
+
 
 def load_jsonl(path: Path) -> list[dict]:
     records = []
@@ -83,12 +84,12 @@ def encode_labels(records: list[dict]) -> dict[str, list[int]]:
 
 # ── CVSS v3.1 Base Score ──────────────────────────────────────────────────────
 
-_AV_W   = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.20}
-_AC_W   = {"L": 0.77, "H": 0.44}
-_UI_W   = {"N": 0.85, "R": 0.62}
-_CIA_W  = {"N": 0.00, "L": 0.22, "H": 0.56}
-_PR_W_U = {"N": 0.85, "L": 0.62, "H": 0.27}   # Scope=Unchanged
-_PR_W_C = {"N": 0.85, "L": 0.68, "H": 0.50}   # Scope=Changed
+_AV_W = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.20}
+_AC_W = {"L": 0.77, "H": 0.44}
+_UI_W = {"N": 0.85, "R": 0.62}
+_CIA_W = {"N": 0.00, "L": 0.22, "H": 0.56}
+_PR_W_U = {"N": 0.85, "L": 0.62, "H": 0.27}  # Scope=Unchanged
+_PR_W_C = {"N": 0.85, "L": 0.68, "H": 0.50}  # Scope=Changed
 
 
 def _roundup(x: float) -> float:
@@ -98,14 +99,14 @@ def _roundup(x: float) -> float:
 
 def cvss31_score(metrics: dict) -> float:
     """Compute CVSS v3.1 Base Score from a metric dict (letter codes)."""
-    av    = _AV_W.get(metrics.get("AV", "N"), 0.85)
-    ac    = _AC_W.get(metrics.get("AC", "L"), 0.77)
+    av = _AV_W.get(metrics.get("AV", "N"), 0.85)
+    ac = _AC_W.get(metrics.get("AC", "L"), 0.77)
     scope = metrics.get("S", "U")
-    pr    = (_PR_W_C if scope == "C" else _PR_W_U).get(metrics.get("PR", "N"), 0.85)
-    ui    = _UI_W.get(metrics.get("UI", "N"), 0.85)
-    c     = _CIA_W.get(metrics.get("C", "N"), 0.00)
-    i     = _CIA_W.get(metrics.get("I", "N"), 0.00)
-    a     = _CIA_W.get(metrics.get("A", "N"), 0.00)
+    pr = (_PR_W_C if scope == "C" else _PR_W_U).get(metrics.get("PR", "N"), 0.85)
+    ui = _UI_W.get(metrics.get("UI", "N"), 0.85)
+    c = _CIA_W.get(metrics.get("C", "N"), 0.00)
+    i = _CIA_W.get(metrics.get("I", "N"), 0.00)
+    a = _CIA_W.get(metrics.get("A", "N"), 0.00)
 
     isc_base = 1.0 - (1.0 - c) * (1.0 - i) * (1.0 - a)
 
@@ -144,6 +145,7 @@ def labels_to_vector_string(label_dict: dict[str, str]) -> str:
 
 
 # ── Evaluation ────────────────────────────────────────────────────────────────
+
 
 def evaluate(
     true_metrics: dict[str, list[int]],
@@ -187,16 +189,18 @@ def evaluate(
     results["hamming_distance"] = float(np.mean(wrong))
 
     # ── CVSS Score MAE ───────────────────────────────────────────────────────
-    true_scores = np.array([
-        float(records[i].get("base_score") or cvss31_score(
-            {m: IDX2LABEL[m][true_metrics[m][i]] for m in METRICS}
-        ))
-        for i in range(n)
-    ])
-    pred_scores = np.array([
-        cvss31_score({m: IDX2LABEL[m][pred_metrics[m][i]] for m in METRICS})
-        for i in range(n)
-    ])
+    true_scores = np.array(
+        [
+            float(
+                records[i].get("base_score")
+                or cvss31_score({m: IDX2LABEL[m][true_metrics[m][i]] for m in METRICS})
+            )
+            for i in range(n)
+        ]
+    )
+    pred_scores = np.array(
+        [cvss31_score({m: IDX2LABEL[m][pred_metrics[m][i]] for m in METRICS}) for i in range(n)]
+    )
     results["score_mae"] = float(np.mean(np.abs(true_scores - pred_scores)))
 
     # ── Severity accuracy ────────────────────────────────────────────────────
@@ -216,17 +220,17 @@ def evaluate(
 
 
 def print_results(name: str, results: dict):
-    print(f"\n{'='*62}")
+    print(f"\n{'=' * 62}")
     print(f"  {name}")
-    print(f"{'='*62}")
-    print(f"  Mean Accuracy    : {results['mean_accuracy']*100:6.2f}%")
-    print(f"  Exact Match      : {results['exact_match']*100:6.2f}%")
+    print(f"{'=' * 62}")
+    print(f"  Mean Accuracy    : {results['mean_accuracy'] * 100:6.2f}%")
+    print(f"  Exact Match      : {results['exact_match'] * 100:6.2f}%")
     print(f"  Hamming Distance : {results['hamming_distance']:.4f}")
     print(f"  Score MAE        : {results['score_mae']:.4f}")
-    print(f"  Severity Accuracy: {results['severity_accuracy']*100:6.2f}%")
-    print(f"  Critical FNR     : {results['critical_fnr']*100:6.2f}%")
+    print(f"  Severity Accuracy: {results['severity_accuracy'] * 100:6.2f}%")
+    print(f"  Critical FNR     : {results['critical_fnr'] * 100:6.2f}%")
     print(f"\n  Per-Metric Accuracy:")
     for m, acc in results["per_metric_accuracy"].items():
         bar = "#" * int(acc * 30)
         name_str = METRIC_FULL_NAMES.get(m, m)
-        print(f"    {m} ({name_str:<22}): {acc*100:5.1f}%  {bar}")
+        print(f"    {m} ({name_str:<22}): {acc * 100:5.1f}%  {bar}")

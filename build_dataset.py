@@ -41,26 +41,30 @@ def build_patch_index(patch_files: list[Path]) -> dict[str, list[dict]]:
 
             # Формат 1: linux collect_patches (patch_diff на верхнем уровне)
             if rec.get("patch_diff"):
-                index.setdefault(cve_id, []).append({
-                    "diff":     rec["patch_diff"],
-                    "repo":     rec.get("patch_repo", ""),
-                    "sha":      rec.get("patch_commit_sha", ""),
-                    "platform": "github",
-                    "url":      rec.get("patch_commit_url", ""),
-                })
+                index.setdefault(cve_id, []).append(
+                    {
+                        "diff": rec["patch_diff"],
+                        "repo": rec.get("patch_repo", ""),
+                        "sha": rec.get("patch_commit_sha", ""),
+                        "platform": "github",
+                        "url": rec.get("patch_commit_url", ""),
+                    }
+                )
                 continue
 
             # Формат 2: patches = [{diff, repo, sha, platform?, url?}, ...]
             for p in rec.get("patches", []):
                 d = p.get("diff", "")
                 if d:
-                    index.setdefault(cve_id, []).append({
-                        "diff":     d,
-                        "repo":     p.get("repo", ""),
-                        "sha":      p.get("sha", ""),
-                        "platform": p.get("platform", ""),
-                        "url":      p.get("url", ""),
-                    })
+                    index.setdefault(cve_id, []).append(
+                        {
+                            "diff": d,
+                            "repo": p.get("repo", ""),
+                            "sha": p.get("sha", ""),
+                            "platform": p.get("platform", ""),
+                            "url": p.get("url", ""),
+                        }
+                    )
     return index
 
 
@@ -85,13 +89,18 @@ def merge_records(nvd_records: list[dict], patch_index: dict[str, list[dict]]) -
             # Основной diff (строка) — для baseline-моделей
             "patch_diff": best["diff"] if best else None,
             # Метаданные первого патча
-            "patch_repo":     best["repo"] if best else None,
-            "patch_sha":      best["sha"]  if best else None,
+            "patch_repo": best["repo"] if best else None,
+            "patch_sha": best["sha"] if best else None,
             "patch_platform": best["platform"] if best else None,
             # Все патчи — для мультипатч-экспериментов
             "all_patches": [
-                {"diff": p["diff"], "repo": p["repo"], "sha": p["sha"],
-                 "platform": p["platform"], "url": p["url"]}
+                {
+                    "diff": p["diff"],
+                    "repo": p["repo"],
+                    "sha": p["sha"],
+                    "platform": p["platform"],
+                    "url": p["url"],
+                }
                 for p in patches
             ],
         }
@@ -127,8 +136,8 @@ def stratified_split(
         n_train = max(1, int(n * train_ratio))
         n_val = max(1, int(n * val_ratio))
         train.extend(items[:n_train])
-        val.extend(items[n_train:n_train + n_val])
-        test.extend(items[n_train + n_val:])
+        val.extend(items[n_train : n_train + n_val])
+        test.extend(items[n_train + n_val :])
 
     random.shuffle(train)
     random.shuffle(val)
@@ -177,7 +186,9 @@ def main():
     print("Объединяю...")
     merged = merge_records(nvd, patch_index)
     with_patch = sum(1 for r in merged if r["has_patch"])
-    print(f"  Итого: {len(merged):,} записей, из них с диффом: {with_patch:,} ({with_patch/len(merged)*100:.1f}%)")
+    print(
+        f"  Итого: {len(merged):,} записей, из них с диффом: {with_patch:,} ({with_patch / len(merged) * 100:.1f}%)"
+    )
 
     print("Разбиваю на train/val/test...")
     train, val, test = stratified_split(merged, args.train_ratio, args.val_ratio, args.seed)

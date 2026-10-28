@@ -1,0 +1,25 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = [
+    ".git",
+    ".venv",
+    "dataset",
+    "models",
+    "data",
+    "outputs",
+    "runs",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+# Conservative baseline for the existing research scripts.
+select = ["E4", "E7", "E9"]
+# Preserve legacy one-line constructs until the scripts are refactored deliberately.
+ignore = ["E701", "E702", "E731", "E741"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

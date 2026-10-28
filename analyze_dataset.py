@@ -14,10 +14,10 @@ METRIC_LABELS = {
     "AC": {"L": "Low", "H": "High"},
     "PR": {"N": "None", "L": "Low", "H": "High"},
     "UI": {"N": "None", "R": "Required"},
-    "S":  {"U": "Unchanged", "C": "Changed"},
-    "C":  {"N": "None", "L": "Low", "H": "High"},
-    "I":  {"N": "None", "L": "Low", "H": "High"},
-    "A":  {"N": "None", "L": "Low", "H": "High"},
+    "S": {"U": "Unchanged", "C": "Changed"},
+    "C": {"N": "None", "L": "Low", "H": "High"},
+    "I": {"N": "None", "L": "Low", "H": "High"},
+    "A": {"N": "None", "L": "Low", "H": "High"},
 }
 
 
@@ -177,7 +177,9 @@ def print_summary(stats: dict):
 
     print("\n[Описания (слов)]")
     ds = stats["desc_stats"]
-    print(f"  mean={ds['mean']:.0f}, median={ds['median']:.0f}, p95={ds['p95']:.0f}, max={ds['max']}")
+    print(
+        f"  mean={ds['mean']:.0f}, median={ds['median']:.0f}, p95={ds['p95']:.0f}, max={ds['max']}"
+    )
 
     print("\n[Top-20 CWE]")
     for cwe, cnt in stats["cwe_distribution"].most_common(20):
@@ -185,7 +187,9 @@ def print_summary(stats: dict):
 
     print("\n[CVSS Base Score]")
     ss = stats["score_stats"]
-    print(f"  mean={ss['mean']:.2f}, CRITICAL(≥9)={ss['critical_pct']:.1f}%, HIGH(7-9)={ss['high_pct']:.1f}%")
+    print(
+        f"  mean={ss['mean']:.2f}, CRITICAL(≥9)={ss['critical_pct']:.1f}%, HIGH(7-9)={ss['high_pct']:.1f}%"
+    )
 
 
 def main():
@@ -212,7 +216,9 @@ def main():
             "overlap_with_nvd": len(overlap),
             "coverage_pct": round(len(overlap) / len(nvd_cves) * 100, 2),
         }
-        print(f"\nПокрытие патчами: {len(overlap):,}/{len(nvd_cves):,} CVE ({stats['patch_coverage']['coverage_pct']}%)")
+        print(
+            f"\nПокрытие патчами: {len(overlap):,}/{len(nvd_cves):,} CVE ({stats['patch_coverage']['coverage_pct']}%)"
+        )
 
     print_summary(stats)
 
