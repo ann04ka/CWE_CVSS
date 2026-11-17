@@ -4,22 +4,22 @@
 
 Одна строка соответствует одной CVE. Основной признак — английское `description`. Цели — восемь категориальных компонент `AV`, `AC`, `PR`, `UI`, `S`, `C`, `I`, `A` в `metrics`. Вектор, базовый балл и severity используются для проверки разметки и расчёта метрик. Дата публикации нужна для разбиения. CWE и diff — дополнительные поля сбора. Источник записей — [NIST NVD API 2.0](https://nvd.nist.gov/developers/vulnerabilities). Правила расчёта балла и severity описаны в [спецификации FIRST](https://www.first.org/cvss/v3-1/specification-document).
 
-Всего проверено 112 946 строк. `dataset/val.jsonl` и `dataset/test.jsonl` доступны в Git, а `train.jsonl` взят из локального исторического снапшота проекта. Его удалось заново собрать из того же локального `nvd_cves.jsonl` и файлов `ref_patches.jsonl` и `osv_patches.jsonl` через `build_dataset.py`. Число строк и распределения всех восьми меток совпали с `dataset/meta.json` для каждого сплита. В [summary.json](summary.json) сохранены SHA-256 входов после нормализации переводов строк к LF, статистика и числители графиков.
+Всего проверено 112 946 строк. `dataset/val.jsonl` и `dataset/test.jsonl` доступны в Git, а `train.jsonl` взят из локального исторического снапшота проекта. Его удалось заново собрать из того же локального `nvd_cves.jsonl` и файлов `ref_patches.jsonl` и `osv_patches.jsonl` через `src/build_dataset.py`. Число строк и распределения всех восьми меток совпали с `dataset/meta.json` для каждого сплита. В [summary.json](summary.json) сохранены SHA-256 входов после нормализации переводов строк к LF, статистика и числители графиков.
 
 Запуск из корня репозитория с Python и пакетами `numpy` и `matplotlib`:
 
 ```bash
 python -m pip install numpy matplotlib
-python -m scripts.eda_cvss --train /path/to/historical/train.jsonl --out-dir eda_full
+python -m src.eda_cvss --train /path/to/historical/train.jsonl --out-dir eda_full
 ```
 
 В чистом клоне можно воспроизвести проверки на 22 595 доступных строках validation/test:
 
 ```bash
-python -m scripts.eda_cvss --data-dir dataset --out-dir eda_public
+python -m src.eda_cvss --data-dir dataset --out-dir eda_public
 ```
 
-Доступные данные можно дополнить собственной выгрузкой NVD за 2021–2024 годы и повторить сборку с `build_dataset.py`. NVD обновляет записи, поэтому новая выгрузка может отличаться от исторического снапшота.
+Доступные данные можно дополнить собственной выгрузкой NVD за 2021–2024 годы и повторить сборку с `src/build_dataset.py`. NVD обновляет записи, поэтому новая выгрузка может отличаться от исторического снапшота.
 
 ## Состав и качество
 
